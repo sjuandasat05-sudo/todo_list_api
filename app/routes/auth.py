@@ -1,3 +1,5 @@
+from fastapi import Request
+from app.limiter import limiter
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -19,7 +21,8 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     summary="Registrar un usuario",
     responses={400: {"description": "El correo ya está registrado"}},
 )
-def register(data: UserCreate, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def register(request: Request, data: UserCreate, db: Session = Depends(get_db)):
     """Crea el usuario con la contraseña en hash y devuelve sus datos públicos más el token."""
     if user_service.get_user_by_email(db, data.email):
         raise HTTPException(status_code=400, detail="El correo ya está registrado")
@@ -38,7 +41,8 @@ def register(data: UserCreate, db: Session = Depends(get_db)):
         403: {"description": "Usuario inactivo"},
     },
 )
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Recibe el correo en el campo `username` y la contraseña. Devuelve el token JWT."""
     user = user_service.authenticate_user(db, form.username, form.password)
     if user is None:
