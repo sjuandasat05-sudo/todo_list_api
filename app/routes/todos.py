@@ -1,3 +1,5 @@
+from fastapi import Request
+from app.limiter import limiter
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -40,7 +42,8 @@ RESP_PROPIEDAD = {
         409: {"description": "La categoría no pertenece al usuario"},
     },
 )
-def create_todo(
+@limiter.limit("20/minute")
+def create_todo(request: Request, 
     data: TodoCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -50,7 +53,8 @@ def create_todo(
 
 
 @router.get("", response_model=TodoPage, summary="Listar mis tareas")
-def list_todos(
+@limiter.limit("60/minute")
+def list_todos(request: Request, 
     page: int = Query(1, ge=1),
     limit: int = Query(10, ge=1, le=100),
     status: TodoStatus | None = None,
