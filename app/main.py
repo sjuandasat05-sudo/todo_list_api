@@ -37,7 +37,7 @@ app = FastAPI(
     description=DESCRIPCION,
     version=__version__,
     openapi_tags=tags_metadata,
-    contact={"name": "Tu Nombre", "email": "tu_correo@ejemplo.com"},
+    contact={"name": "Juan David Salazar Torres", "email": "tu_correo@ejemplo.com"},
 )
 
 app.state.limiter = limiter

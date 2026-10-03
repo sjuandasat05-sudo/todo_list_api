@@ -107,33 +107,157 @@ Login 5 por minuto, register 3, POST /todos 20 y GET /todos 60.
 | v0.6 | F6 Middleware, CORS y rate limiting |
 | v1.0.0 | F7 Documentación y cierre |
 
-## Pruebas y evidencias
 
-Las capturas están en `docs/evidencias/`.
 
-| N.º | Prueba | Resultado esperado | Evidencia |
-| --- | --- | --- | --- |
-| 1 | alembic upgrade head en base vacía | Se crean users, categories y todos | prueba_01_migracion.png |
-| 2 | Registrar usuario válido | 201 y la BD guarda el hash | prueba_02_registro.png |
-| 3 | Registrar con contraseña débil | 422 | prueba_03_password_debil.png |
-| 4 | Registrar con correo duplicado | 400 | prueba_04_correo_duplicado.png |
-| 5 | Login correcto e incorrecto | 200 con token; 401 | prueba_05_login.png |
-| 6 | GET /auth/me con y sin token | 200; 401 | prueba_06_me.png |
-| 7 | POST /todos con token | 201 con owner_id | prueba_07_crear_tarea.png |
-| 8 | POST /todos sin token o alterado | 401 | prueba_08_sin_token.png |
-| 9 | Paginación con 5 tareas | 2 elementos, total 5 | prueba_09_paginacion.png |
-| 10 | Filtros y orden | Solo las tareas que cumplen | prueba_10_filtros.png |
-| 11 | GET de ID inexistente | 404 | prueba_11_404.png |
-| 12 | PUT y DELETE de tarea ajena | 403 | prueba_12_403.png |
-| 13 | PUT y PATCH propios | 200 | prueba_13_put_patch.png |
-| 14 | PATCH con cuerpo vacío | 400 | prueba_14_patch_vacio.png |
-| 15 | DELETE propio y GET posterior | 204 y luego 404 | prueba_15_delete.png |
-| 16 | GET /admin/todos como user y como admin | 403 y 200 | prueba_16_admin.png |
-| 17 | Cabeceras del middleware | X-Request-ID, X-Process-Time, X-App-Name | prueba_17_cabeceras.png |
-| 18 | Preflight CORS | Permitido solo desde localhost:5173 | prueba_18_cors.png |
-| 19 | Seis logins en un minuto | El sexto responde 429 | prueba_19_429.png |
-| 20 | /docs y /redoc | Tags, Authorize, modelos y códigos | prueba_20_docs.png |
+## Decisiones de diseño
+
+### Modelo SQLAlchemy y schema Pydantic son distintos
+
+El modelo (`User`, `Todo`) describe cómo se guarda el dato: tablas, tipos, constraints y relaciones, incluido `hashed_password`. El schema (`UserCreate`, `UserPublic`, `TodoOut`) describe qué entra y qué sale por la API, y valida los datos. Separarlos permite:
+
+* **Seguridad:** `UserPublic` no tiene `hashed_password`, así que ninguna respuesta puede exponerlo.
+* **Formatos distintos por entidad:** al crear se exige `title`, en el PATCH todo es opcional y en la respuesta aparecen `id` y fechas que el cliente no envía.
+* **Independencia:** se puede cambiar la base de datos sin romper el contrato de la API. El puente es `ConfigDict(from_attributes=True)`.
+
+### Uso de `Depends()`
+
+Cada regla vive en una sola función reutilizable y FastAPI las resuelve en cadena:
+
+* `get_db` entrega la sesión y la cierra al terminar la petición.
+* `get_current_user` valida el token (401 si falla).
+* `get_current_active_user` agrega el 403 por usuario inactivo.
+* `require_admin` exige el rol admin (403).
+* `get_owned_todo_or_404` responde 404 si la tarea no existe y 403 si es de otro usuario.
+
+Así, un endpoint como `PUT /todos/{id}` solo declara `Depends(get_owned_todo_or_404)` y ya tiene autenticación, existencia y propiedad resueltas.
+
+### CORS sin `"*"` cuando hay credenciales
+
+Con `allow_credentials=True` el navegador envía credenciales al otro origen, y la especificación de CORS no permite responder `Access-Control-Allow-Origin: *` en ese caso. Además, cualquier sitio podría hacer peticiones autenticadas en nombre del usuario. Por eso se listan los orígenes de forma explícita (`http://localhost:5173` y `http://localhost:3000`), y la prueba 18 comprueba que otro origen no recibe el permiso. Los `"*"` de `allow_methods` y `allow_headers` no tienen ese problema, porque limitan qué métodos y cabeceras se aceptan, no quién puede hacer la petición.
+
+## Evidencias de las pruebas
+
+1. alembic upgrade head en base vacía
+
+![alt text](docs/evidencias/image.png)
+
+
+![alt text](docs/evidencias/prueba_01_migracion.png)
+
+2. Registrar usuario válido
+
+![alt text](docs/evidencias/image-2.png)
+
+![alt text](docs/evidencias/prueba_02_registro.png)
+
+3. Registrar con contraseña debil
+
+![alt text](docs/evidencias/prueba_03_password_debil.png)
+
+4. Registrar con correo duplicado
+
+![alt text](docs/evidencias/prueba_04_correo_duplicado.png)
+
+5. Login correcto e incorrecto
+
+![alt text](docs/evidencias/image-6.png)
+
+![alt text](docs/evidencias/prueba_05_login.png)
+
+6. GET /auth/me con y sin token
+
+![alt text](docs/evidencias/image-8.png)
+
+![alt text](docs/evidencias/prueba_06_me.png)
+
+7. POST /todos con token
+
+![alt text](docs/evidencias/prueba_07_crear_tarea.png)
+
+8. POST /todos sin token o alterado
+
+![alt text](docs/evidencias/prueba_08_sin_token.png)
+
+9. Paginación con 5 tareas
+
+![alt text](docs/evidencias/prueba_09_paginacion.png)
+
+10. Filtros y orden
+
+![alt text](docs/evidencias)
+
+![alt text](docs/evidencias/prueba_10_filtros.png)
+
+11. GET de ID inexistente
+
+![alt text](docs/evidencias/prueba_11_404.png)
+
+12. PUT y DELETE de tarea ajena
+
+![alt text](docs/evidencias/prueba_12_403.png)
+
+![alt text](docs/evidencias/prueba_12_403.png)
+
+13. PUT y PATCH propios
+
+![alt text](docs/evidencias/prueba_13_put_patch.png)
+
+![alt text](docs/evidencias/prueba_13_put_patch.png)
+
+14. PATCH con cuerpo vacío
+
+![alt text](docs/evidencias/prueba_14_patch_vacio.png)
+
+15. DELETE propio y GET posterior
+
+![alt text](docs/evidencias/image-21.png)
+
+![alt text](docs/evidencias/image-22.png)
+
+![alt text](docs/evidencias/prueba_15_delete.png)
+
+16. GET /admin/todos como user y como admin
+
+![alt text](docs/evidencias/image-24.png)
+
+![alt text](docs/evidencias)
+
+![alt text](docs/evidencias/prueba_16_admin.png)
+
+17. Cabeceras del middleware
+
+![alt text](docs/evidencias/prueba_17_cabeceras.png)
+
+18. Preflight CORS
+![alt text](docs/evidencias/prueba_18_cors.png)
+
+19.
+
+![alt text](docs/evidencias/prueba_19_429.png)
+
+20. 
+Redoc
+
+![alt text](docs/evidencias/)
+
+docs
+
+![alt text](docs/evidencias/prueba_20_docs.png)
+
+## REFLEXION
+
+Cuando empecé este proyecto pensaba que lo difícil iba a ser escribir el código. Con el tiempo me di cuenta de que lo que más me costaba, y lo que más me ayudó, era mantener el orden. Trabajar por fases, con ramas y commits, al principio me pareció un exceso, hasta que algo falló y pude encontrar el problema sin volverme loco buscando.
+
+También entendí que una API es mucho más que hacer que los endpoints respondan. Hay que pensar en quién puede ver qué, en cuidar las contraseñas, en validar lo que llega y en explicar bien los errores. Cuando vi en Swagger los códigos 401, 403, 404 y 422 funcionando, por fin les encontré sentido: dejaron de ser números raros y pasaron a ser respuestas con una razón de ser.
+
+Hubo errores, y varios momentos en los que me frustré. Pero cada uno me obligó a frenar, leer con calma y preguntarme por qué pasaban las cosas, en lugar de copiar una solución y seguir. Eso fue lo que más me cambió.
+
+Termino con más seguridad, mejores hábitos y la tranquilidad de saber que, con orden y constancia, soy capaz de sacar adelante un proyecto completo.
+
+
+
 
 ## Autor
 
-Tu Nombre
+Juan David Salazar Torres
+
